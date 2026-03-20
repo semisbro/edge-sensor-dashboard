@@ -12,4 +12,4 @@ find_package(Crow CONFIG REQUIRED)
 
 add_executable(portfolio_cpp main.cpp)   # change "main.cpp" if your file has a different name
 
-target_link_libraries(portfolio_cpp PRIVATE Crow::Crow ws2_32 mswsock)
+target_link_libraries(portfolio_cpp PRIVATE Crow::Crow ws2_32 mswsock wbemuuid ole32 oleaut32)
