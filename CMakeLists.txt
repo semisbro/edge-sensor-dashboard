@@ -33,5 +33,5 @@ target_include_directories(
 target_link_libraries(portfolio_cpp PRIVATE Threads::Threads)
 
 if(WIN32)
-    target_link_libraries(portfolio_cpp PRIVATE ws2_32 mswsock wbemuuid ole32 oleaut32)
+    target_link_libraries(portfolio_cpp PRIVATE ws2_32 mswsock wbemuuid ole32 oleaut32 shell32)
 endif()

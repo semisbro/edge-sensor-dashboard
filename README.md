@@ -1,189 +1,218 @@
-# portfolio_cpp
+# portfolio_cpp — Tactical Edge Node Dashboard
 
-`portfolio_cpp` ist ein C++17-Proof-of-Concept fuer einen Telemetrie- und Sensor-Service mit HTTP-API auf Basis von Crow. Laut [`handoff.md`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/handoff.md) ist das Projekt als taktischer Edge-Node-Mockup fuer ein spaeteres Linux-/ARM-Deployment gedacht. Der aktuelle Implementierungsstand bildet jedoch vor allem einen Windows-nativen Systemmonitor ab, der lokale Systemdaten per REST bereitstellt.
+A full-stack systems telemetry project built for an aerospace / defense portfolio.
+A C++17 service collects live hardware metrics and streams them over a REST API;
+a React dashboard visualises the data in real time.
 
-## Ziel laut Handoff
+The concept mirrors a field-deployed edge node feeding a C4I command dashboard —
+compact binary, no runtime dependencies, self-hosted frontend.
 
-Das Handoff beschreibt ein Portfolio-Projekt fuer die Ruestungs-/Aerospace-Domaene:
+---
 
-- hardwarenahe Sensordatenerfassung auf einem Edge-Knoten
-- Bereitstellung der Daten ueber eine REST-API
-- spaeteres Dashboard fuer C4I-/Monitoring-Szenarien
-- Zielplattform langfristig: Linux auf ARM, z. B. Raspberry Pi
+## Tech Stack
 
-Geplante Architektur:
+| Layer | Technology |
+|---|---|
+| Backend | C++17 · [Crow](https://crowcpp.org) HTTP micro-framework · Asio (async I/O) |
+| System APIs | WinAPI · WMI · Windows Registry · `GetLogicalProcessorInformation` |
+| Frontend | React 18 · Vite 5 · TanStack React Query v5 |
+| Build | CMake 3.15+ · Yarn · multi-stage Docker image |
 
-1. Hardware-Layer: Sensoren und Systemdaten lesen, bei Bedarf mit Mocking/Fallback
-2. Network-Layer: JSON-API mit Crow
-3. Presentation-Layer: Frontend fuer Visualisierung und Polling
+---
 
-## Aktueller Ist-Zustand
+## What This Project Demonstrates
 
-Der aktuelle Code in [`main.cpp`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/main.cpp) implementiert einen Crow-Webservice mit Hintergrund-Threads fuer die Erfassung von Windows-Systemmetriken.
+- **Systems-level C++17** — two background threads collecting CPU, memory, disk and thermal data; mutex-guarded snapshot pattern; smart-pointer ownership throughout
+- **Windows internals** — registry reads, `GetLogicalProcessorInformation` for CPU topology, `RtlGetVersion` for true OS build number, WMI thermal queries, UAC elevation via embedded manifest
+- **REST API design** — Crow routes, JSON serialisation, OpenAPI 3.0 document served at runtime, SPA fallback routing, static file serving
+- **Modern React** — TanStack React Query for polling / cache management, dark/light theming via CSS custom properties, tab navigation, responsive layout
+- **Full-stack integration** — Vite dev-proxy in development; production build served directly by the C++ binary with no web server in front of it
 
-Erfasste Daten:
+---
 
-- CPU-Auslastung ueber `GetSystemTimes`
-- Anzahl logischer CPU-Kerne
-- CPU-Basisfrequenz aus der Windows-Registry
-- RAM-Auslastung und Commit-Werte ueber `GlobalMemoryStatusEx`
-- Festplattennutzung des Systemlaufwerks `C:`
-- Uptime ueber `GetTickCount64`
-- Temperaturzonen ueber WMI (`MSAcpi_ThermalZoneTemperature`)
+## Dashboard Features
 
-Die Sensordaten werden in einem globalen Cache gehalten und ueber Crow-Handler als JSON ausgeliefert.
+| Feature | Detail |
+|---|---|
+| **4 tabs** | Overview · Disks · Thermal · System |
+| **Overview** | CPU usage + clock · memory used/available/commit · primary disk · uptime |
+| **Disks** | Full logical drive inventory — mount point, filesystem, volume label, capacity bars |
+| **Thermal** | Per-zone temperature cards, colour-coded by severity, alert banner above 60 °C |
+| **System** | OS name, version, build, hostname, privilege level · CPU brand, vendor, architecture, physical/logical cores, base/boost clocks, L2 and L3 cache |
+| **Server health** | Navbar chip shows Crow backend URL, live/offline dot, and round-trip latency (ms) |
+| **Demo mode** | One-click toggle replaces live data with static realistic values — useful for presentations when no backend is running |
+| **Dark / Light theme** | Persisted to `localStorage`; dark is the default |
+| **UAC elevation** | Manifest embedded in the `.exe` requests Administrator on launch, which is required for WMI thermal sensor access |
 
-## API-Endpunkte
+---
 
-Die Anwendung startet standardmaessig auf Port `18080`. Der Port kann ueber die Umgebungsvariable `PORT` gesetzt werden.
+## API
 
-- `GET /`
-  Liefert Basisinformationen zum Service.
-- `GET /api/sensors`
-  Liefert einen Snapshot der aktuell gecachten Sensordaten.
-- `GET /api/hello/<name>`
-  Einfacher Test-Endpunkt fuer eine Begruessung.
-- `GET /openapi.json`
-  Liefert ein eingebettetes OpenAPI-3.0-Dokument.
+The service starts on port `18080` by default; override with the `PORT` environment variable.
 
-Beispiel fuer `GET /api/sensors`:
+| Endpoint | Description |
+|---|---|
+| `GET /` | Serves the React SPA if `frontend/dist/` is present, otherwise returns service metadata |
+| `GET /api/sensors` | Live telemetry snapshot (see shape below) |
+| `GET /api/disks` | Full logical drive inventory |
+| `GET /api/meta` | Service name, framework, endpoint list |
+| `GET /openapi.json` | OpenAPI 3.0 document |
+| `GET /api/hello/<name>` | Sanity-check echo endpoint |
+
+### `GET /api/sensors` — response shape
 
 ```json
 {
   "cpu": {
-    "usage_percent": 12.3,
-    "logical_cores": 8,
-    "base_freq_mhz": 2400
+    "usage_percent": 34.7,
+    "logical_cores": 16,
+    "physical_cores": 8,
+    "base_freq_mhz": 3600,
+    "max_freq_mhz": 5200,
+    "vendor": "GenuineIntel",
+    "brand": "Intel(R) Core(TM) i9-13900K @ 3.00GHz",
+    "architecture": "x64",
+    "l2_cache_kb": 2048,
+    "l3_cache_kb": 36864
   },
   "memory": {
-    "total_mb": 16384.0,
-    "available_mb": 9123.4,
-    "used_percent": 44.0,
-    "commit_total_mb": 32768.0,
-    "commit_used_mb": 11800.0
+    "total_mb": 32768.0,
+    "available_mb": 14336.0,
+    "used_percent": 56.2,
+    "commit_total_mb": 49152.0,
+    "commit_used_mb": 28672.0
   },
   "disk": {
     "drive": "C:",
-    "total_gb": 476.0,
-    "free_gb": 210.0,
-    "used_percent": 55.9
+    "total_gb": 512.0,
+    "free_gb": 187.4,
+    "used_percent": 63.4
   },
   "temperatures": [
-    {
-      "zone": "zone_0",
-      "celsius": 48.2
-    }
+    { "zone": "zone_0", "celsius": 48.3 }
   ],
   "system": {
-    "uptime_seconds": 12345.0
+    "uptime_seconds": 1323794.0
+  },
+  "os": {
+    "name": "Windows 11 Pro",
+    "display_version": "24H2",
+    "build": "26100",
+    "hostname": "EDGE-NODE-01",
+    "architecture": "x64",
+    "is_elevated": true
   }
 }
 ```
 
-## Build und Start
+---
 
-### Lokaler Build mit CMake
+## Architecture
 
-Die Build-Konfiguration in [`CMakeLists.txt`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/CMakeLists.txt) ist derzeit auf Windows und `vcpkg` zugeschnitten. Sie erwartet eine installierte Crow-Konfiguration ueber:
+```
+┌──────────────────────────────────────────────────┐
+│  Presentation layer  (React 18 + Vite)           │
+│  Polls /api/sensors every 2 s via React Query    │
+│  Polls /api/disks every 10 s                     │
+│  Pings /api/meta every 5 s for health status     │
+└─────────────────────┬────────────────────────────┘
+                      │ HTTP / JSON
+┌─────────────────────▼────────────────────────────┐
+│  Network layer  (Crow + Asio)                    │
+│  configure_routes() wires all endpoints          │
+│  Serves frontend/dist/ as static files           │
+│  Emits OpenAPI document at /openapi.json         │
+└─────────────────────┬────────────────────────────┘
+                      │ C++ structs
+┌─────────────────────▼────────────────────────────┐
+│  Platform layer  (TelemetryCollector interface)  │
+│  WindowsTelemetryCollector  — two background     │
+│  threads: system metrics (1 s) + WMI thermal     │
+│  (5 s). Static CPU/OS info read once at start.   │
+│  NullTelemetryCollector     — non-Windows stub   │
+└──────────────────────────────────────────────────┘
+```
 
-`C:/Users/Kirsc/vcpkg/scripts/buildsystems/vcpkg.cmake`
+Platform implementations are selected at **compile time** via `#ifdef _WIN32` — the same factory function `make_default_telemetry_collector()` is used on all platforms.
 
-Beispiel:
+---
+
+## Quick Start
+
+### Prerequisites
+
+- CMake 3.15+, a C++17 compiler (MSVC or MinGW-w64)
+- Node.js + Yarn (for the frontend)
+- Crow and Asio are vendored in `third_party/` — no package manager needed
+
+### Build and run
 
 ```powershell
+# 1. Build the C++ backend
 cmake -S . -B build
-cmake --build build --config Release
-.\build\Release\portfolio_cpp.exe
-```
+cmake --build build
 
-Je nach Generator kann das Binary auch direkt unter `build\portfolio_cpp.exe` liegen.
-
-### Laufzeit
-
-```powershell
-$env:PORT="18080"
-.\build\Release\portfolio_cpp.exe
-```
-
-Danach ist die API unter `http://localhost:18080` erreichbar.
-
-## Docker-Stand
-
-Ein [`Dockerfile`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/Dockerfile) und eine [`docker-compose.yml`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/docker-compose.yml) sind vorhanden. Inhaltlich zielen diese Dateien auf ein Linux-Container-Setup ab.
-
-Wichtiger Hinweis:
-
-- Der aktuelle Anwendungscode ist Windows-spezifisch und verwendet `windows.h`, WMI und WinAPI-Aufrufe.
-- Das Dockerfile basiert auf Ubuntu.
-- In der aktuellen Form passen Codebasis und Containerziel daher noch nicht zusammen.
-
-Das bedeutet: Das Projekt hat bereits einen API-Prototypen, aber die Linux-/ARM-Ausrichtung aus dem Handoff ist noch nicht erreicht.
-
-## Technische Einordnung
-
-Aktuell ist das Projekt am treffendsten als Windows-basierter Telemetrie-API-Prototyp zu beschreiben:
-
-- Crow ist integriert und die REST-API laeuft im Grundsatz
-- Sensorwerte werden asynchron im Hintergrund gesammelt
-- OpenAPI wird direkt vom Service ausgeliefert
-- Die geplante Linux-/ARM-Sensorik aus dem Handoff ist noch nicht umgesetzt
-- Ein Frontend ist im aktuellen Repository noch nicht enthalten
-
-## Frontend-Entwicklung mit React
-
-Es gibt jetzt einen separaten React-/Vite-Teil unter [`frontend/`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/frontend), der bewusst fuer die direkte UI-Entwicklung vom C++-Backend getrennt ist.
-
-### Dev-Modus
-
-1. Crow-Backend starten:
-
-```powershell
-.\build\Release\portfolio_cpp.exe
-```
-
-2. Frontend-Abhaengigkeiten mit `yarn` installieren:
-
-```powershell
+# 2. Build the frontend (optional — the binary works without it)
 cd frontend
 yarn install
+yarn build
+cd ..
+
+# 3. Run (UAC prompt will appear — required for thermal sensors)
+.\build\portfolio_cpp.exe
 ```
 
-3. Vite-Dev-Server starten:
+The dashboard is then available at `http://localhost:18080`.
 
-```powershell
-yarn dev
-```
-
-Danach laeuft das Frontend standardmaessig unter `http://localhost:5173`.
-
-Wichtig:
-
-- Requests auf `/api/*` und `/openapi.json` werden im Dev-Modus automatisch an `http://localhost:18080` weitergeleitet.
-- UI-Aenderungen brauchen keinen C++-Rebuild.
-
-### Produktions-/Demo-Build
-
-Das Frontend kann fuer einen gemeinsamen Deploy mit Crow gebaut werden:
+### Frontend dev server
 
 ```powershell
 cd frontend
-yarn build
+yarn dev        # http://localhost:5173
+                # Proxies /api and /openapi.json → localhost:18080
 ```
 
-Dadurch entsteht `frontend/dist`. Wenn diese Build-Artefakte vorhanden sind, liefert Crow beim Aufruf von `/` die React-App aus. API-Endpunkte wie `/api/sensors` und `/openapi.json` bleiben dabei erhalten.
+### Docker (Linux target)
 
-## Naechste sinnvolle Schritte
+```bash
+docker build -t portfolio_cpp .
+docker run -p 18080:18080 portfolio_cpp
+```
 
-- Linux-kompatible Sensorabfragen fuer CPU, RAM, Temperatur und Dateisystem ergaenzen
-- Windows-spezifische und Linux-spezifische Sensorquellen sauber kapseln
-- Crow-Build vereinfachen, damit kein lokaler, hart codierter `vcpkg`-Pfad noetig ist
-- Docker-Image auf den tatsaechlichen Zielcode abstimmen
-- React-/Vite-Dashboard aus dem Handoff als dritte Schicht ergaenzen
+> The Docker image targets Linux / Ubuntu and uses the `NullTelemetryCollector` (no Windows APIs available). The Linux sensor implementation is on the roadmap.
 
-## Projektdateien
+---
 
-- [`main.cpp`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/main.cpp): Crow-Service, Sensor-Caching, JSON-Ausgabe, OpenAPI
-- [`CMakeLists.txt`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/CMakeLists.txt): CMake-Projektdefinition und Crow-Linking
-- [`handoff.md`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/handoff.md): Zielbild, Kontext und Architekturrahmen
-- [`Dockerfile`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/Dockerfile): geplanter Container-Build
-- [`docker-compose.yml`](/C:/Users/Kirsc/CLionProjects/portfolio_cpp/docker-compose.yml): lokaler Container-Start
+## Roadmap
+
+- **Linux telemetry** — replace `NullTelemetryCollector` with a real implementation reading `/proc/stat`, `/proc/meminfo` and `/sys/class/thermal/`; enables Raspberry Pi / ARM deployment
+- **GPS + signal simulation** — mock geo-coordinates and RF signal strength for a more complete C4I mockup
+- **Docker parity** — extend the multi-stage image to also bundle the built React frontend
+
+---
+
+## Project Layout
+
+```
+portfolio_cpp/
+├── main.cpp                          Entry point
+├── CMakeLists.txt
+├── portfolio_cpp.manifest            UAC elevation manifest
+├── portfolio_cpp.rc                  Embeds manifest into the .exe
+├── include/portfolio/
+│   ├── telemetry_models.hpp          SensorData, CpuStaticInfo, OsInfo, DiskInfo
+│   ├── platform/telemetry_collector.hpp
+│   └── web/
+├── src/
+│   ├── platform/windows/             WindowsTelemetryCollector
+│   ├── platform/fallback/            NullTelemetryCollector (Linux / CI)
+│   └── web/                          Routes, payloads, static file serving
+├── frontend/                         React 18 + Vite dashboard
+│   └── src/
+│       ├── api/                      sensors.js · disks.js · ping.js
+│       ├── config.js                 CROW_SERVER_URL
+│       ├── mockData.js               Static demo data
+│       └── App.jsx
+├── third_party/crow/                 Vendored — no install needed
+└── third_party/asio/
+```
