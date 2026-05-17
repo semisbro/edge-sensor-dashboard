@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn build *)",
+      "Bash(start cmd *)",
+      "Bash(node --input-type=module --eval \"import\\('./src/mockData.js'\\).then\\(m => { const d = m.getMockSensors\\(\\); console.log\\('cpu:', d.cpu.usage_percent, 'mem:', d.memory.used_percent, 'zones:', d.temperatures.length\\); console.log\\('disks:', m.MOCK_DISKS.count\\); }\\)\")"
+    ]
+  }
+}
