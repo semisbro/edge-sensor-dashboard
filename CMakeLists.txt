@@ -16,12 +16,6 @@ add_executable(
     src/web/frontend_assets.cpp
 )
 
-if(WIN32)
-    # Embed the UAC manifest so Windows prompts for elevation on launch.
-    # The manifest is required to access WMI thermal sensors (MSAcpi_ThermalZoneTemperature).
-    target_sources(portfolio_cpp PRIVATE portfolio_cpp.rc)
-endif()
-
 target_include_directories(
     portfolio_cpp
     PRIVATE
