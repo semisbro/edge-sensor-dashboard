@@ -115,6 +115,33 @@ cd frontend && yarn dev    # http://localhost:5173  — proxies /api to the C++ 
 
 ---
 
+## Helper Scripts
+
+Two convenience scripts live at the repo root.
+
+### `run_crow_server_in_foreground.sh`
+
+Builds the backend if the binary is missing, checks that the port is free, then runs the server in the foreground with coloured log output. `Ctrl+C` shuts it down cleanly.
+
+```bash
+./run_crow_server_in_foreground.sh          # default port 18080
+PORT=9090 ./run_crow_server_in_foreground.sh   # custom port
+```
+
+Use this instead of calling the binary directly — it handles the build step and port-collision check for you.
+
+### `build_index_entry_for_frontend.sh`
+
+Builds the frontend with `--base ./` (relative asset paths) and copies the output to the repo root (`index.html` + `assets/`) for **GitHub Pages deployment**. Not needed for normal local development.
+
+```bash
+./build_index_entry_for_frontend.sh
+# or, pointing at a different backend host:
+VITE_CROW_URL=my-host:18080 ./build_index_entry_for_frontend.sh
+```
+
+---
+
 ## Project Layout
 
 ```
