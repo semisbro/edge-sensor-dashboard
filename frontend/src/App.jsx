@@ -461,8 +461,9 @@ function ThermalTab({ temperatures }) {
         <div className="empty-state__icon">◈</div>
         <p className="empty-state__title">No thermal zones reported</p>
         <p className="empty-state__sub">
-          WMI thermal data requires elevated permissions on some Windows configurations.
-          Try running the backend as Administrator.
+          On Linux, thermal zones are read from /sys/class/thermal — none detected (VM or unsupported kernel).
+          On macOS, SMC thermal access requires a third-party driver.
+          On Windows, run the backend as Administrator to enable WMI thermal zones.
         </p>
       </div>
     );
@@ -566,9 +567,9 @@ export default function App() {
     () => localStorage.getItem("theme") ?? "dark"
   );
   const [activeTab, setActiveTab] = useState("overview");
-  // Default ON — localStorage allows turning it off persistently
+  // Default OFF — demo mode is opt-in for presentations
   const [mockMode, setMockMode] = useState(
-    () => localStorage.getItem("mockMode") !== "false"
+    () => localStorage.getItem("mockMode") === "true"
   );
 
   useEffect(() => {

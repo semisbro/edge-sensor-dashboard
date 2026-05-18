@@ -1,193 +1,117 @@
-# portfolio_cpp — Tactical Edge Node Dashboard
+# portfolio_cpp — Live Edge Sensor Dashboard
 
-A full-stack systems telemetry project built for an aerospace / defense portfolio.
-A C++17 service collects live hardware metrics and streams them over a REST API;
-a React dashboard visualises the data in real time.
+> **Full-stack systems project** · C++17 backend · React 18 frontend · zero cloud dependencies
 
-The concept mirrors a field-deployed edge node feeding a C4I command dashboard —
-compact binary, no runtime dependencies, self-hosted frontend.
+Think of a sensor box bolted to a satellite ground station or a battlefield vehicle — it monitors every heartbeat of the hardware and streams that data to a command dashboard in real time. This project is exactly that, running on your own machine.
+
+One self-contained binary. No cloud. No Docker required to try it. Just build and run.
+
+---
+
+## Why This Project Exists
+
+Off-the-shelf monitoring tools are black boxes. This project goes one layer deeper:
+
+- **Talks directly to the OS** — WinAPI, WMI, and the Windows Registry for CPU topology, real-time load, thermal zones, and OS metadata; no third-party agent in between
+- **Ships its own web server** — the C++ binary serves the React dashboard as static files; no Nginx, no Node server in front of it
+- **Designed for embedded targets** — strict C++17, smart pointers only, no exceptions across API boundaries; the same binary is meant to compile for ARM Linux (Raspberry Pi)
+
+---
+
+## What It Does
+
+- Samples CPU usage, memory pressure, disk capacity, and thermal zone temperatures — updated every second in the background
+- Exposes everything over a clean REST/JSON API with an OpenAPI spec served at runtime
+- Drives a live React dashboard that auto-refreshes every 2 seconds via polling
+- Runs fully offline — no external calls, no telemetry sent anywhere
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Backend | C++17 · [Crow](https://crowcpp.org) HTTP micro-framework · Asio (async I/O) |
-| System APIs | WinAPI · WMI · Windows Registry · `GetLogicalProcessorInformation` |
-| Frontend | React 18 · Vite 5 · TanStack React Query v5 |
-| Build | CMake 3.15+ · Yarn · multi-stage Docker image |
+**Backend — where the interesting bits are**
+- **C++17** — two mutex-guarded background threads; one for system metrics (1 s interval), one for WMI thermal queries (5 s interval); snapshot pattern keeps the HTTP path lock-free
+- **[Crow](https://crowcpp.org)** — lightweight C++ HTTP micro-framework (think Express, but a single header)
+- **Asio** — async I/O without Boost; vendored directly, no install needed
+
+**Frontend**
+- **React 18 + Vite** — fast build, small bundle
+- **TanStack React Query** — polling, caching, and stale-data management out of the box
+
+**Build**
+- **CMake 3.15+** — platform-conditional compilation; the right collector is selected at build time, not runtime
+- **Yarn** — frontend only
 
 ---
 
-## What This Project Demonstrates
+## Dashboard at a Glance
 
-- **Systems-level C++17** — two background threads collecting CPU, memory, disk and thermal data; mutex-guarded snapshot pattern; smart-pointer ownership throughout
-- **Windows internals** — registry reads, `GetLogicalProcessorInformation` for CPU topology, `RtlGetVersion` for true OS build number, WMI thermal queries, UAC elevation via embedded manifest
-- **REST API design** — Crow routes, JSON serialisation, OpenAPI 3.0 document served at runtime, SPA fallback routing, static file serving
-- **Modern React** — TanStack React Query for polling / cache management, dark/light theming via CSS custom properties, tab navigation, responsive layout
-- **Full-stack integration** — Vite dev-proxy in development; production build served directly by the C++ binary with no web server in front of it
+- **Overview** — CPU %, memory used/available/commit, primary disk, uptime counter
+- **Disks** — full logical drive inventory with capacity bars, filesystem type, and volume labels
+- **Thermal** — per-zone temperature cards color-coded by severity; alert banner fires above 60 °C
+- **System** — OS version, build number, hostname, CPU brand, physical/logical cores, L2/L3 cache, privilege level
+- **Server health chip** — live/offline dot + round-trip latency in ms, always visible in the navbar
+- **Demo mode** — swaps live data for realistic static values in one click; great for presentations without a running backend
+- **Dark / Light theme** — persisted to `localStorage`
 
 ---
 
-## Dashboard Features
+## How It's Built (Three Layers)
 
-| Feature | Detail |
+```
+[ React dashboard ]  ←─── HTTP/JSON, polls every 2 s ───→  [ Crow HTTP server ]
+                                                                    │
+                                                        [ TelemetryCollector ]
+                                                         abstract interface;
+                                                         Windows / macOS / Linux
+                                                         impl selected at compile time
+```
+
+| Layer | Responsibility |
 |---|---|
-| **4 tabs** | Overview · Disks · Thermal · System |
-| **Overview** | CPU usage + clock · memory used/available/commit · primary disk · uptime |
-| **Disks** | Full logical drive inventory — mount point, filesystem, volume label, capacity bars |
-| **Thermal** | Per-zone temperature cards, colour-coded by severity, alert banner above 60 °C |
-| **System** | OS name, version, build, hostname, privilege level · CPU brand, vendor, architecture, physical/logical cores, base/boost clocks, L2 and L3 cache |
-| **Server health** | Navbar chip shows Crow backend URL, live/offline dot, and round-trip latency (ms) |
-| **Demo mode** | One-click toggle replaces live data with static realistic values — useful for presentations when no backend is running |
-| **Dark / Light theme** | Persisted to `localStorage`; dark is the default |
-| **UAC elevation** | Manifest embedded in the `.exe` requests Administrator on launch, which is required for WMI thermal sensor access |
+| **Platform** | OS-specific data collection; `make_default_telemetry_collector()` factory wired via `#ifdef` |
+| **Web** | Crow routes, JSON serialisation, OpenAPI doc, SPA fallback, static file serving |
+| **Frontend** | React app — served by the binary in production, proxied via Vite in dev |
 
 ---
 
 ## API
 
-The service starts on port `18080` by default; override with the `PORT` environment variable.
+Default port `18080` — override with the `PORT` environment variable.
 
-| Endpoint | Description |
+| Endpoint | Returns |
 |---|---|
-| `GET /` | Serves the React SPA if `frontend/dist/` is present, otherwise returns service metadata |
-| `GET /api/sensors` | Live telemetry snapshot (see shape below) |
+| `GET /` | React SPA (falls back to service metadata if frontend isn't built) |
+| `GET /api/sensors` | Live snapshot — CPU, memory, disk, thermals, OS info |
 | `GET /api/disks` | Full logical drive inventory |
 | `GET /api/meta` | Service name, framework, endpoint list |
-| `GET /openapi.json` | OpenAPI 3.0 document |
-| `GET /api/hello/<name>` | Sanity-check echo endpoint |
-
-### `GET /api/sensors` — response shape
-
-```json
-{
-  "cpu": {
-    "usage_percent": 34.7,
-    "logical_cores": 16,
-    "physical_cores": 8,
-    "base_freq_mhz": 3600,
-    "max_freq_mhz": 5200,
-    "vendor": "GenuineIntel",
-    "brand": "Intel(R) Core(TM) i9-13900K @ 3.00GHz",
-    "architecture": "x64",
-    "l2_cache_kb": 2048,
-    "l3_cache_kb": 36864
-  },
-  "memory": {
-    "total_mb": 32768.0,
-    "available_mb": 14336.0,
-    "used_percent": 56.2,
-    "commit_total_mb": 49152.0,
-    "commit_used_mb": 28672.0
-  },
-  "disk": {
-    "drive": "C:",
-    "total_gb": 512.0,
-    "free_gb": 187.4,
-    "used_percent": 63.4
-  },
-  "temperatures": [
-    { "zone": "zone_0", "celsius": 48.3 }
-  ],
-  "system": {
-    "uptime_seconds": 1323794.0
-  },
-  "os": {
-    "name": "Windows 11 Pro",
-    "display_version": "24H2",
-    "build": "26100",
-    "hostname": "EDGE-NODE-01",
-    "architecture": "x64",
-    "is_elevated": true
-  }
-}
-```
-
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────┐
-│  Presentation layer  (React 18 + Vite)           │
-│  Polls /api/sensors every 2 s via React Query    │
-│  Polls /api/disks every 10 s                     │
-│  Pings /api/meta every 5 s for health status     │
-└─────────────────────┬────────────────────────────┘
-                      │ HTTP / JSON
-┌─────────────────────▼────────────────────────────┐
-│  Network layer  (Crow + Asio)                    │
-│  configure_routes() wires all endpoints          │
-│  Serves frontend/dist/ as static files           │
-│  Emits OpenAPI document at /openapi.json         │
-└─────────────────────┬────────────────────────────┘
-                      │ C++ structs
-┌─────────────────────▼────────────────────────────┐
-│  Platform layer  (TelemetryCollector interface)  │
-│  WindowsTelemetryCollector  — two background     │
-│  threads: system metrics (1 s) + WMI thermal     │
-│  (5 s). Static CPU/OS info read once at start.   │
-│  NullTelemetryCollector     — non-Windows stub   │
-└──────────────────────────────────────────────────┘
-```
-
-Platform implementations are selected at **compile time** via `#ifdef _WIN32` — the same factory function `make_default_telemetry_collector()` is used on all platforms.
+| `GET /openapi.json` | OpenAPI 3.0 spec, served at runtime |
 
 ---
 
 ## Quick Start
 
-### Prerequisites
+**You need:** CMake 3.15+, a C++17 compiler, Node.js, Yarn
 
-- CMake 3.15+, a C++17 compiler (MSVC or MinGW-w64)
-- Node.js + Yarn (for the frontend)
-- Crow and Asio are vendored in `third_party/` — no package manager needed
-
-### Build and run
-
-```powershell
-# 1. Build the C++ backend
+```bash
+# 1 — build the backend
 cmake -S . -B build
 cmake --build build
 
-# 2. Build the frontend (optional — the binary works without it)
-cd frontend
-yarn install
-yarn build
-cd ..
+# 2 — build the frontend  (optional — the binary works without it)
+cd frontend && yarn install && yarn build && cd ..
 
-# 3. Run (UAC prompt will appear — required for thermal sensors)
-.\build\portfolio_cpp.exe
+# 3 — run
+./build/portfolio_cpp           # macOS / Linux
+.\build\portfolio_cpp.exe       # Windows  (UAC prompt = needed for WMI thermal access)
 ```
 
-The dashboard is then available at `http://localhost:18080`.
+Go to `http://localhost:18080`. That's it.
 
-### Frontend dev server
-
-```powershell
-cd frontend
-yarn dev        # http://localhost:5173
-                # Proxies /api and /openapi.json → localhost:18080
-```
-
-### Docker (Linux target)
-
+**Live frontend dev (hot reload):**
 ```bash
-docker build -t portfolio_cpp .
-docker run -p 18080:18080 portfolio_cpp
+cd frontend && yarn dev    # http://localhost:5173  — proxies /api to the C++ backend
 ```
-
-> The Docker image targets Linux / Ubuntu and uses the `NullTelemetryCollector` (no Windows APIs available). The Linux sensor implementation is on the roadmap.
-
----
-
-## Roadmap
-
-- **Linux telemetry** — replace `NullTelemetryCollector` with a real implementation reading `/proc/stat`, `/proc/meminfo` and `/sys/class/thermal/`; enables Raspberry Pi / ARM deployment
-- **GPS + signal simulation** — mock geo-coordinates and RF signal strength for a more complete C4I mockup
-- **Docker parity** — extend the multi-stage image to also bundle the built React frontend
 
 ---
 
@@ -195,24 +119,28 @@ docker run -p 18080:18080 portfolio_cpp
 
 ```
 portfolio_cpp/
-├── main.cpp                          Entry point
+├── main.cpp                          Entry point + Windows UAC elevation logic
 ├── CMakeLists.txt
-├── portfolio_cpp.manifest            UAC elevation manifest
-├── portfolio_cpp.rc                  Embeds manifest into the .exe
 ├── include/portfolio/
 │   ├── telemetry_models.hpp          SensorData, CpuStaticInfo, OsInfo, DiskInfo
-│   ├── platform/telemetry_collector.hpp
-│   └── web/
+│   ├── platform/telemetry_collector.hpp   Abstract interface + factory
+│   └── web/                          Route, payload, and asset headers
 ├── src/
-│   ├── platform/windows/             WindowsTelemetryCollector
-│   ├── platform/fallback/            NullTelemetryCollector (Linux / CI)
-│   └── web/                          Routes, payloads, static file serving
-├── frontend/                         React 18 + Vite dashboard
-│   └── src/
-│       ├── api/                      sensors.js · disks.js · ping.js
-│       ├── config.js                 CROW_SERVER_URL
-│       ├── mockData.js               Static demo data
-│       └── App.jsx
-├── third_party/crow/                 Vendored — no install needed
-└── third_party/asio/
+│   ├── platform/windows/             WinAPI + WMI implementation
+│   ├── platform/macos/               macOS stub (in progress)
+│   ├── platform/linux/               Linux stub → next major milestone
+│   └── web/                          Routes, JSON payloads, static file serving
+├── frontend/src/
+│   ├── api/                          sensors.js · disks.js · ping.js
+│   ├── mockData.js                   Demo mode static data
+│   └── App.jsx
+└── third_party/                      Crow + Asio vendored — nothing to install
 ```
+
+---
+
+## What's Next
+
+- **Linux telemetry** — real reads from `/proc/stat`, `/proc/meminfo`, `/sys/class/thermal/`; unlocks Raspberry Pi / ARM deployment
+- **Docker** — multi-stage build: C++ compile stage → minimal runtime image with frontend bundled in
+- **GPS + RF simulation** — mock coordinates and signal strength for a more complete C4I scenario demo

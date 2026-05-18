@@ -1,4 +1,4 @@
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__APPLE__) && !defined(__linux__)
 
 #include <memory>
 #include <vector>
@@ -29,4 +29,4 @@ std::unique_ptr<TelemetryCollector> make_default_telemetry_collector() {
 
 }  // namespace portfolio::platform
 
-#endif
+#endif  // !_WIN32 && !__APPLE__ && !__linux__

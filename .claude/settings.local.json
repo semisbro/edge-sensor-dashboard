@@ -3,7 +3,23 @@
     "allow": [
       "Bash(yarn build *)",
       "Bash(start cmd *)",
-      "Bash(node --input-type=module --eval \"import\\('./src/mockData.js'\\).then\\(m => { const d = m.getMockSensors\\(\\); console.log\\('cpu:', d.cpu.usage_percent, 'mem:', d.memory.used_percent, 'zones:', d.temperatures.length\\); console.log\\('disks:', m.MOCK_DISKS.count\\); }\\)\")"
+      "Bash(node --input-type=module --eval \"import\\('./src/mockData.js'\\).then\\(m => { const d = m.getMockSensors\\(\\); console.log\\('cpu:', d.cpu.usage_percent, 'mem:', d.memory.used_percent, 'zones:', d.temperatures.length\\); console.log\\('disks:', m.MOCK_DISKS.count\\); }\\)\")",
+      "Bash(git submodule *)",
+      "Bash(git clone *)",
+      "Bash(cmake *)",
+      "Bash(chmod +x /Users/simonwischnevetski/CLionProjects/portfolio_cpp/run_crow_server_in_foreground.sh)",
+      "Bash(bash /Users/simonwischnevetski/CLionProjects/portfolio_cpp/run_crow_server_in_foreground.sh)",
+      "Bash(kill %1)",
+      "Bash(wait %1)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(PORT=19999 bash /Users/simonwischnevetski/CLionProjects/portfolio_cpp/run_crow_server_in_foreground.sh)",
+      "Bash(curl -s http://localhost:19999/api/meta)",
+      "Bash(curl -s http://localhost:18080/api/meta)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://localhost:18080/api/sensors)",
+      "Bash(lsof -iTCP:18080 -sTCP:LISTEN -t)",
+      "Bash(xargs kill)",
+      "Bash(sudo chown -R simonwischnevetski /Users/simonwischnevetski/CLionProjects/portfolio_cpp/build)"
     ]
   }
 }
