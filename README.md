@@ -12,7 +12,7 @@ One self-contained binary. No cloud. No Docker required to try it. Just build an
 
 Off-the-shelf monitoring tools are black boxes. This project goes one layer deeper:
 
-- **Talks directly to the OS** — WinAPI, WMI, and the Windows Registry for CPU topology, real-time load, thermal zones, and OS metadata; no third-party agent in between
+- **Talks directly to the OS** — WinAPI, WMI, and the Windows Registry on Windows; Mach kernel APIs and sysctl on macOS; `/proc`/`/sys` on Linux/ARM; no third-party agent in between
 - **Ships its own web server** — the C++ binary serves the React dashboard as static files; no Nginx, no Node server in front of it
 - **Designed for embedded targets** — strict C++17, smart pointers only, no exceptions across API boundaries; the same binary is meant to compile for ARM Linux (Raspberry Pi)
 
@@ -30,7 +30,7 @@ Off-the-shelf monitoring tools are black boxes. This project goes one layer deep
 ## Tech Stack
 
 **Backend — where the interesting bits are**
-- **C++17** — two mutex-guarded background threads; one for system metrics (1 s interval), one for WMI thermal queries (5 s interval); snapshot pattern keeps the HTTP path lock-free
+- **C++17** — mutex-guarded background threads; 1 s system-metrics loop, 5 s WMI thermal loop (Windows); snapshot pattern keeps the HTTP path lock-free across all platforms
 - **[Crow](https://crowcpp.org)** — lightweight C++ HTTP micro-framework (think Express, but a single header)
 - **Asio** — async I/O without Boost; vendored directly, no install needed
 
@@ -69,7 +69,7 @@ Off-the-shelf monitoring tools are black boxes. This project goes one layer deep
 
 | Layer | Responsibility |
 |---|---|
-| **Platform** | OS-specific data collection; `make_default_telemetry_collector()` factory wired via `#ifdef` |
+| **Platform** | OS-specific data collection; `make_default_telemetry_collector()` factory wired via `#ifdef` — real implementations for Windows, macOS, and Linux/ARM |
 | **Web** | Crow routes, JSON serialisation, OpenAPI doc, SPA fallback, static file serving |
 | **Frontend** | React app — served by the binary in production, proxied via Vite in dev |
 
@@ -126,9 +126,9 @@ portfolio_cpp/
 │   ├── platform/telemetry_collector.hpp   Abstract interface + factory
 │   └── web/                          Route, payload, and asset headers
 ├── src/
-│   ├── platform/windows/             WinAPI + WMI implementation
-│   ├── platform/macos/               macOS stub (in progress)
-│   ├── platform/linux/               Linux stub → next major milestone
+│   ├── platform/windows/             WinAPI + WMI — CPU, RAM, disk, thermals, registry
+│   ├── platform/macos/               Mach + sysctl — CPU, RAM, disk, OS; thermals in progress
+│   ├── platform/linux/               /proc + /sys — CPU, RAM, disk, thermals, OS; ARM-compatible
 │   └── web/                          Routes, JSON payloads, static file serving
 ├── frontend/src/
 │   ├── api/                          sensors.js · disks.js · ping.js
@@ -139,8 +139,19 @@ portfolio_cpp/
 
 ---
 
+## Platform Status
+
+| Platform | CPU | RAM | Disk | Thermals | Notes |
+|---|---|---|---|---|---|
+| **Windows** | ✅ WinAPI | ✅ WinAPI | ✅ WinAPI | ✅ WMI | UAC prompt needed for thermal access |
+| **macOS** | ✅ Mach | ✅ Mach VM | ✅ statfs | 🔜 SMC | Apple SMC requires elevated reads — in progress |
+| **Linux / ARM** | ✅ /proc/stat | ✅ /proc/meminfo | ✅ statvfs | ✅ /sys/class/thermal | Runs on Raspberry Pi (aarch64 + armv7) |
+
+---
+
 ## What's Next
 
-- **Linux telemetry** — real reads from `/proc/stat`, `/proc/meminfo`, `/sys/class/thermal/`; unlocks Raspberry Pi / ARM deployment
+- **macOS thermals** — SMC temperature reads via IOKit; requires `sudo` or a helper daemon; implementation in progress
+- **Elevated reads helper** — privilege escalation path for macOS SMC and any future Linux hwmon reads that need root
 - **Docker** — multi-stage build: C++ compile stage → minimal runtime image with frontend bundled in
 - **GPS + RF simulation** — mock coordinates and signal strength for a more complete C4I scenario demo
