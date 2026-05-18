@@ -39,7 +39,7 @@ Off-the-shelf monitoring tools are black boxes. This project goes one layer deep
 - **TanStack React Query** — polling, caching, and stale-data management out of the box
 
 **Build**
-- **CMake 3.15+** — platform-conditional compilation; the right collector is selected at build time, not runtime
+- **CMake 3.15+** — platform-conditional compilation; the right collector is selected at build time, not runtime. Crow and Asio are auto-fetched from GitHub at configure time if not already present in `third_party/`
 - **Yarn** — frontend only
 
 ---
@@ -143,7 +143,7 @@ portfolio_cpp/
 │   ├── api/                          sensors.js · disks.js · ping.js
 │   ├── mockData.js                   Demo mode static data
 │   └── App.jsx
-└── third_party/                      Crow + Asio vendored — nothing to install
+└── third_party/                      Crow + Asio — auto-fetched by CMake if absent
 ```
 
 ---
